@@ -1,0 +1,49 @@
+---
+title: "Jaccard Simalarity"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+
+```{r}
+#setup
+rm(list = ls())
+
+user.directory = "c:/Users/spamb/" #where your dropbox file is 
+
+source(paste(user.directory, "Dropbox/regiondemarcation/code/git/community-analysis/compare_covers_function_bank.R", sep = ''))
+
+```
+
+
+
+```{r}
+r1 = region.extraction(msa2010,1)
+```
+
+```{r}
+cover_analysis(msa2010)
+```
+
+```{r}
+region.statistics(msa2010)
+```
+
+```{r}
+fuzzy.rand.index.regions.results(reg.comm.list$yr2010,nathaniel2010,2010)
+```
+
+
+
+
+
+
+
+
+
