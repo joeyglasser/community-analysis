@@ -10,9 +10,7 @@ load("continental_counties.Rdata") #loads continental.counties which is a datafr
 load("2010_undirected_edgelist.Rdata")
 
 
-
-
-CreateMap = function(group.list, county = NULL, state = NULL, named.counties = NULL, named.county.labels = NULL){
+CreateMap = function(group.list, county = NULL, state = NULL, named.counties = NULL, named.county.labels = NULL, heat.map = F){
   # Creates interactable leaflet map for communities. More on leaflet maps can be found here: https://rstudio.github.io/leaflet/
   #
   # Args:
@@ -25,6 +23,8 @@ CreateMap = function(group.list, county = NULL, state = NULL, named.counties = N
   #
   #   named.county.labels: list of labels to be included for each county in named.counties. named.county.labels[[i]] should be a list of info (as strings) to be
   #                        included for named.counties[[i]]. 
+  #
+  #   heat.map: if true will make the map a heatmap indicating the number of communities each county belongs to
   #   
   #
   # Returns:
@@ -148,6 +148,7 @@ CreateMap = function(group.list, county = NULL, state = NULL, named.counties = N
   tags = data.frame(continental.counties$NAME, continental.counties$fips)
   tags[,3] = ""
   colnames(tags) = c("name","fips","communities")
+  tags$community.count = 0
   
   for(i in 1:length(ordered.group.list)){ #interating over each community
     counties = as.numeric(ordered.group.list[[i]]) 
@@ -155,8 +156,10 @@ CreateMap = function(group.list, county = NULL, state = NULL, named.counties = N
       county = counties[j]
       if(tags[tags$fips == county,"communities"] == ""){
         tags[tags$fips == county,"communities"] = as.character(i)
+        tags[tags$fips == county,"community.count"] = 1
       } else {
         tags[tags$fips == county,"communities"] = paste(tags[tags$fips == county,"communities"], as.character(i), sep = ", ")
+        tags[tags$fips == county,"community.count"] = tags[tags$fips == county,"community.count"] + 1
       }
     }
   }
@@ -173,17 +176,30 @@ CreateMap = function(group.list, county = NULL, state = NULL, named.counties = N
   
  
   
-  #adding layers 
-  for(i in 1:as.integer(ncol(map.layers)/2)){
-    if(!is.null(county)){
-      county.rows = map.layers[,GetLabel(i)]
-    } else {
-      county.rows = map.layers[map.layers[,1] == county ,GetLabel(i)]
+  #making heatmap 
+  if(heat.map){
+    
+    pal = colorBin("YlOrRd", domain = tags[tags$community.count > 0,"community.count"])
+    map = map %>% addPolygons(data = continental.counties[tags$community.count > 0,], color = "#000000", fillColor = ~pal(tags[tags$community.count > 0,"community.count"]), fillOpacity = 1,
+                              weight = 1, group = "heat map") %>%
+      addLegend("bottomright", pal = pal, values = ~tags[tags$community.count > 0,"community.count"], opacity = 1, title = "Community Count")
+    
+    
+  } else {
+    #adding layers if heatmap option isn't selected 
+    for(i in 1:as.integer(ncol(map.layers)/2)){
+      if(!is.null(county)){
+        county.rows = map.layers[,GetLabel(i)]
+      } else {
+        county.rows = map.layers[map.layers[,1] == county ,GetLabel(i)]
+      }
+      map = map %>% addPolygons(data = continental.counties[county.rows,], color = "#000000", fillColor = map.layers[county.rows, GetLabel(i,TRUE)], fillOpacity = 0.5,
+                                weight = 1, group = as.character(i))
+      
     }
-    map = map %>% addPolygons(data = continental.counties[county.rows,], color = "#000000", fillColor = map.layers[county.rows, GetLabel(i,TRUE)], fillOpacity = 0.5,
-                              weight = 1, group = as.character(i)
-    )
   }
+  
+  
   map = map %>% addPolygons(data = continental.counties, color = "transparent", fillColor = "transparent", fillOpacity = 1, weight = 1 ,group = "labels",
                             label = labels)
   
@@ -221,29 +237,43 @@ CreateMap = function(group.list, county = NULL, state = NULL, named.counties = N
   }
   
   #adding layer control
-  if(permanent.labels.included){
-    map = map %>% addLayersControl(
-      baseGroups = c("main"),
-      overlayGroups = c("labels", "permanent labels", as.character(1:as.integer(ncol(map.layers)/2))),
-      options = layersControlOptions(collapsed = TRUE)
-    )
-  } else {
-    map = map %>% addLayersControl(
-      baseGroups = c("main"),
-      overlayGroups = c("labels",as.character(1:as.integer(ncol(map.layers)/2))),
-      options = layersControlOptions(collapsed = TRUE)
-    )
-  }
-  return(map)
+  overlayGroups = c("labels")
   
+  if(permanent.labels.included){
+    overlayGroups = c(overlayGroups, "permanent labels")
+  }
+  
+  if(heat.map){
+    overlayGroups = c(overlayGroups, "heat map")
+  } else {
+    overlayGroups = c(overlayGroups, as.character(1:as.integer(ncol(map.layers)/2)))
+  }
+
+  map = map %>% addLayersControl(
+    baseGroups = c("main"),
+    overlayGroups = overlayGroups,
+    options = layersControlOptions(collapsed = TRUE)
+  )
+
+  return(map)
 }
 
 
 #Sample execution
 load("sample.group.list")
-triangle = list("37183", "37063")
-triangle.info = list(list("103249 commuters", "big"), list("41905 commuters", "small"))
-map = CreateMap(sample.group.list, state = 37, named.counties = triangle, named.county.labels = triangle.info)
+
+# nc.fips = 37
+# 
+# triangle = list("37183", "37063")
+# 
+# triangle.info = list(list("103249 commuters", "big"), 
+#                      list("41905 commuters", "small", "is a hub"))
+# 
+# map = CreateMap(sample.group.list, state = nc.fips, named.counties = triangle, named.county.labels = triangle.info, heat.map = T)
+# 
+# map
+
+map = CreateMap(sample.group.list, heat.map = T)
 map
 
 
