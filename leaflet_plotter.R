@@ -179,7 +179,7 @@ CreateMap = function(group.list, county = NULL, state = NULL, named.counties = N
   #making heatmap 
   if(heat.map){
     
-    pal = colorBin("YlOrRd", domain = tags[tags$community.count > 0,"community.count"])
+    pal = colorBin("YlOrRd", domain = tags[tags$community.count > 0,"community.count"], bins = c(1,2,5,10,15, Inf))
     map = map %>% addPolygons(data = continental.counties[tags$community.count > 0,], color = "#000000", fillColor = ~pal(tags[tags$community.count > 0,"community.count"]), fillOpacity = 1,
                               weight = 1, group = "heat map") %>%
       addLegend("bottomright", pal = pal, values = ~tags[tags$community.count > 0,"community.count"], opacity = 1, title = "Community Count")
