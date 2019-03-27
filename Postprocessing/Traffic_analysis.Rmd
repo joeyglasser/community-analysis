@@ -1,0 +1,255 @@
+---
+title: "MSA_traffic_analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#setup
+rm(list = ls())
+
+library(xtable)
+
+user.directory = "c:/Users/spamb/" #where your dropbox file is 
+
+source(paste(user.directory, "Dropbox/regiondemarcation/code/git/community-analysis/compare_covers_function_bank.R", sep = ''))
+
+load(paste(user.directory, "Dropbox/regiondemarcation/code/git/community-analysis/Data/comm_results.Rdata", sep = ''))
+load(paste(user.directory, "Dropbox/regiondemarcation/code/git/community-analysis/Postprocessing/Results/communities_and_hubs_cvt2.Rdata", sep = ''))
+```
+
+```{r}
+# Creating edge list where nodes labels are fips codes 
+numeric.msa.2010 = lapply(msa2010, as.integer)
+for(i in 1:nrow(E)){
+  node1 = E[i,1]
+  node2 = E[i,2]
+  
+  node1.fips = key$fips[key$node == node1]
+  node2.fips = key$fips[key$node == node2]
+  
+  
+  E[i,1] = node1.fips
+  E[i,2] = node2.fips
+}
+```
+
+
+
+```{r}
+commuters.in.community = list()
+for(i in 1:length(numeric.msa.2010)){
+  community = numeric.msa.2010[[i]]
+  in.commuinty = (E$node1 %in% community) & (E$node2 %in% community)
+  commuters.in.community[i] = sum(E$commuters[in.commuinty])
+}
+unaccounted = sum(E$commuters) - sum(sapply(commuters.in.community, sum))
+print(unaccounted) # commuters that do not commute within a community (they travel between communities)
+print(unaccounted / sum(E$commuters)) # proportion of commuters that travel between different communities 
+```
+
+```{r}
+get.commuter.count <- function(community, SL = 0){
+  # gets the number of commuters within a community 
+  #
+  # Arguments: 
+  #   community: list of fips codes denoting counties of a single community 
+  #   SL: if greater than 0, result is the number of self looping commuters 
+  #       if less than 0, result is the number of non self looping commuters 
+  #       if 0, the result is simply the number of commuters 
+
+
+  in.commuinty = (E$node1 %in% community) & (E$node2 %in% community)
+  total.commuters <- sum(E$commuters[in.commuinty])
+
+  if(SL != 0){
+    sl.count <- 0
+    for(j in 1:length(community)){
+      county <- community[[j]]
+      in.county = (E$node1 == county) & (E$node2 == county)
+      sl.count = sl.count + sum(E$commuters[in.county])
+    }
+    if(SL < 0){
+      return(total.commuters - sl.count)
+    } else {
+      return(sl.count)
+    }
+  } else {
+    return(total.commuters)
+  }
+}
+```
+
+```{r}
+get.distinct.traffic <- function(cover){
+  # gets the number of commuters traveling withing any community within the cover
+  #
+  # Arguments: 
+  #   cover: list of communities which are lists of fips codes 
+  #
+  # Returns:
+  #   count of commuters traveling within communities within the cover 
+  
+  include.edge <- logical(length = length(E$node1))
+  for(i in 1:length(cover)){
+    community = lapply(cover[[i]], as.integer)
+    in.community = (E$node1 %in% community) & (E$node2 %in% community)
+    include.edge = include.edge | in.community
+  }
+  return(sum(E$commuters[include.edge]))
+}
+```
+
+```{r}
+# Creating dataframe of MSA traffic statistics by region
+
+region.statistics = data.frame(1:9)
+colnames(region.statistics) <- c("Region")
+region.statistics$nCommunities <- 0 # number of communities
+region.statistics$avgCommuters <- 0 # average number of commuters per community
+region.statistics$avgSL <- 0 # average number of self looping commuters per community
+region.statistics$avgNSL <- 0 # average number of non self looping commuters per community 
+region.statistics$communityCommuters <- 0 #number of commuters communiting within a community 
+region.statistics$totalCommuters <- 0 #total traffic in region
+region.statistics$ratio <- 0 # % traffic accounted for 
+
+for(i in 1:9){
+  region.cover <- lapply(region.extraction(msa2010, i), as.integer)
+  region.statistics$nCommunities[i] <- length(region.cover)
+  region.statistics$avgCommuters[i] <- mean(sapply(region.cover, get.commuter.count, SL = 0))
+  region.statistics$avgSL[i] <- mean(sapply(region.cover, get.commuter.count, SL = 1))
+  region.statistics$avgNSL[i] <- mean(sapply(region.cover, get.commuter.count, SL = -1))
+  region.statistics$communityCommuters[i] <- get.distinct.traffic(region.cover)
+  region.statistics$totalCommuters[i] <- get.commuter.count(unlist(region.extraction(as.character(unique(c(E$node1, E$node2))), i)))
+  region.statistics$ratio[i] <- region.statistics$communityCommuters[i]/region.statistics$totalCommuters[i] 
+}
+region.statistics
+#sum(region.statistics$communityCommuters) /  sum(region.statistics$totalCommuters)
+```
+
+
+
+
+
+
+```{r}
+community.statistics = data.frame(1:9)
+colnames(community.statistics) <- c("Region")
+community.statistics$nCommunities <- 0 # number of communities
+community.statistics$avgCommuters <- 0 # average number of commuters per community
+community.statistics$communityCommuters <- 0 #commuters traveling within a community
+community.statistics$totalCommuters <- 0 #total traffic in region
+
+for(i in 1:9){
+  region.cover <- lapply(region.extraction(comms_cvt, i), as.integer)
+  community.statistics$nCommunities[i] <- length(region.cover)
+  community.statistics$avgCommuters[i] <- mean(sapply(region.cover, get.commuter.count, SL = 0))
+  community.statistics$communityCommuters[i] <- get.distinct.traffic(region.cover)
+  community.statistics$totalCommuters[i] <- get.commuter.count(unlist(region.extraction(as.character(unique(c(E$node1, E$node2))), i)))
+  
+}
+community.statistics
+```
+
+
+
+### like prev but for everything !!!!!!!!!!
+```{r}
+
+community.statistics = data.frame(1:9)
+colnames(community.statistics) <- c("Region")
+community.statistics$nCommunities <- 0 # number of communities
+community.statistics$avgCommuters <- 0 # average number of commuters per community
+#community.statistics$communityCommuters <- 0 #commuters traveling within a community
+community.statistics$totalCommuters <- 0 #total traffic in region
+  community.statistics$totalN <- 0
+    community.statistics$meansize <-0
+
+
+for(i in 1:9){
+  region.cover <- lapply(region.extraction( c(comms_cvt, hubspoke_cvt, island_cvt)  , i), as.integer)
+  community.statistics$avgCommuters[i] <- mean(sapply(region.cover, get.commuter.count, SL = 0))
+  community.statistics$nCommunities[i] <- length(region.cover)
+  
+    region.cover.sizes <- sapply(region.cover, length)
+    community.statistics$totalN[i] <- length(region.cover)
+    community.statistics$meansize[i] <- mean(region.cover.sizes)
+  
+  
+  community.statistics$totalCommuters[i] <- get.commuter.count(unlist(region.extraction(as.character(unique(c(E$node1, E$node2))), i)))
+  
+}
+community.statistics
+```
+
+
+```{r}
+get.region.coverage <- function(cover){
+  cover.statistics = data.frame(1:9)
+  colnames(cover.statistics) <- c("Region")
+  cover.statistics$communityCommuters <- 0 #number of commuters communiting within a community 
+  cover.statistics$totalCommuters <- 0 #total traffic in region
+  cover.statistics$ratio <- 0 # % traffic accounted for 
+  
+  for(i in 1:9){
+    region.cover <- lapply(region.extraction(cover, i), as.integer)
+    if(length(region.cover) > 0){
+          cover.statistics$communityCommuters[i] <- get.distinct.traffic(region.cover)
+    cover.statistics$totalCommuters[i] <- get.commuter.count(unlist(region.extraction(as.character(unique(c(E$node1, E$node2))), i)))
+    cover.statistics$ratio[i] <- cover.statistics$communityCommuters[i]/cover.statistics$totalCommuters[i] 
+      
+    }
+  }
+  return(cover.statistics)
+}
+
+island.statistics <- get.region.coverage(island_cvt)
+island.statistics
+```
+
+
+```{r}
+hubspoke.statistics <- get.region.coverage(hubspoke_cvt)
+hubspoke.statistics
+```
+
+```{r}
+everything.coverage <- get.region.coverage(c(comms_cvt, hubspoke_cvt, island_cvt))
+everything.coverage
+```
+
+```{r}
+get.mean.commuinty.size <- function(cover){
+  size.statistics <- data.frame(1:9)
+  colnames(size.statistics) <- c("Region")
+  size.statistics$totalN <- 0
+  size.statistics$mean <- 0
+  size.statistics$sd <- 0
+  size.statistics$median <- 0
+  size.statistics$min <- 0
+  size.statistics$max <- 0
+  size.statistics$total.counties <- 0
+  for(i in 1:9){
+    region.cover <- lapply(region.extraction(cover, i), as.integer)
+    region.cover.sizes <- sapply(region.cover, length)
+    size.statistics$totalN[i] <- length(region.cover)
+    size.statistics$mean[i] <- mean(region.cover.sizes)
+    size.statistics$sd[i] <- sd(region.cover.sizes)
+    size.statistics$median[i] <- median(region.cover.sizes)
+    size.statistics$min[i] <- min(region.cover.sizes)
+    size.statistics$max[i] <- max(region.cover.sizes)
+    size.statistics$total.counties[i] <- length(unique(unlist(region.cover)))
+  }
+  return(size.statistics)
+}
+
+results <- get.mean.commuinty.size(msa2010)
+results
+```
+```{r}
+xtable(results)
+```
+
